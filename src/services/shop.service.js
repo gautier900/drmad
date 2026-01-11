@@ -85,9 +85,57 @@ async function updateBasket(data) {
   return response
 }
 
+async function addOrderByUserId(data) {
+  let response = null;
+  try {
+    response = await LocalSource.addOrderByUserId(data)
+  }
+  catch(err) {
+    response = {error: 1, status: 500, data: 'erreur réseau, impossible de créer la commande'}
+  }
+  return response
+}
+
+async function buyOrderById(data) {
+  let response = null;
+  try {
+    response = await LocalSource.buyOrderById(data)
+  }
+  catch(err) {
+    response = {error: 1, status: 500, data: 'erreur réseau, impossible de payer la commande'}
+  }
+  return response
+}
+
+async function getOrdersByUserId(data) {
+  let response = null;
+  try {
+    response = await LocalSource.getOrdersByUserId(data)
+  }
+  catch(err) {
+    response = {error: 1, status: 500, data: 'erreur réseau, impossible de récupérer les commandes'}
+  }
+  return response
+}
+
+async function cancelOrderById(data) {
+  let response = null;
+  try {
+    response = await LocalSource.cancelOrderById(data)
+  }
+  catch(err) {
+    response = {error: 1, status: 500, data: 'erreur réseau, impossible d\'annuler la commande'}
+  }
+  return response
+}
+
 export default {
   shopLogin,
   getAllViruses,
   getBasket,
-  updateBasket
+  updateBasket,
+  addOrderByUserId,
+  buyOrderById,
+  getOrdersByUserId,
+  cancelOrderById
 }

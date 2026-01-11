@@ -1,8 +1,7 @@
 import { items, shopusers, bankaccounts, transactions } from '@/datasource/data.js'
 import {v4 as uuidv4} from 'uuid'
-import {bcrypt} from 'bcryptjs'
-import { useRouter } from 'vue-router'
-const router = useRouter()
+import bcrypt from 'bcryptjs'
+
 /* Les fonctions ci-dessous doivent mimer ce que renvoie l'API en fonction des requêtes possibles.
 
   Dans certains cas, ces fonctions vont avoir des paramètres afin de filtrer les données qui se trouvent dans data.js
@@ -16,21 +15,28 @@ const router = useRouter()
  * Si le login et le mot de passe sont fournis, que le login correspond à un utilisateur existant,
  * shopLogin() renvoie un objet contenant uniquement l'id, le nom, le login, l'email
  * et un identifiant de session sous forme d'un uuid. Sinon, un texte d'erreur est renvoyé.
- * NB: pas de test du mot de passe dans cet exemple.
  * @param data
  * @returns {{error: number, status: number, data: string}|{error: number, status: number, data: {_id: string | *, name: string | *, login: string | *, email: string | *, session}}}
  */
 function shopLogin(data) {
-  if ((!data.login) || (!data.password)) return {error: 1, status: 404, data: 'aucun login/pass fourni'}
-  // pour simplifier : test uniquement le login
-  let user = shopusers.find(e => e.login === data.login && bcrypt.compareSync(e.password,e.data))
-  if (!user) return {error: 1, status: 404, data: 'login/pass incorrect'}
-  else router.push('/shop/buy')
-  // générer un uuid de session pour l'utilisateur si non existant
+  if (!data.login || !data.password) {
+    return {error: 1, status: 400, data: 'Login et mot de passe requis'}
+  }
+
+  let user = shopusers.find(e => e.login === data.login)
+  if (!user) {
+    return {error: 1, status: 404, data: 'Utilisateur non trouvé'}
+  }
+
+  const passwordMatches = bcrypt.compareSync(data.password, user.password)
+  if (!passwordMatches) {
+    return {error: 1, status: 403, data: 'Mot de passe incorrect'}
+  }
+
   if (!user.session) {
     user.session = uuidv4()
   }
-  // retourne uniquement les champs nécessaires
+
   let u = {
     _id: user._id,
     name: user.name,
@@ -77,28 +83,114 @@ function getAccountTransactions(number) {
   return {error: 0, status: 200, data: trans}
 }
 
-/**
- * Met à jour (remplace) le champ `basket` d'un utilisateur.
- * Attend un objet `data` contenant au minimum `{ _id: '<userId>', basket: [...] }`.
- * Renvoie le panier enregistré (clone) ou une erreur si l'utilisateur est introuvable.
- * Simple et dans la même veine que les autres fonctions du service (format {error,status,data}).
- */
 function updateBasket(data) {
-
-  const user = shopusers.find(u => u._id == data._id)
-  if (!user) return { error: 1, status: 404, data: 'utilisateur introuvable' }
-  const basket = JSON.parse(JSON.stringify(data.basket))
-  user.basket = JSON.parse(JSON.stringify(basket))
-
-  return { error: 0, status: 200, data: basket }
+  if (!data || !data._id) return {error: 1, status: 400, data: 'identifiant requis'}
+  
+  let user = shopusers.find(u => u._id === data._id)
+  if (!user) return {error: 1, status: 404, data: 'utilisateur non trouvé'}
+  
+  user.basket = data.basket || []
+  
+  return {error: 0, status: 200, data: JSON.parse(JSON.stringify(user.basket))}
 }
 
+
 function getBasket(data) {
+  if (!data || !data._id) return {error: 1, status: 400, data: 'identifiant requis'}
   
-  let user =  shopusers.find(e => e._id == data._id) // cherche un utilisateur dans usershop
-  if (user.basket == null) user.basket = [] // si pas encore de panier (c.a.d. null ou undefined), le créer
-  let basket = JSON.parse(JSON.stringify(user.basket)) // clone son panier
+  let user = shopusers.find(e => e._id == data._id)
+  if (!user) return {error: 1, status: 404, data: 'utilisateur non trouvé'}
+  
+  if (user.basket == null) user.basket = []
+  
+  let basket = JSON.parse(JSON.stringify(user.basket))
   return {error: 0, status: 200, data: basket}
+}
+
+
+function addOrderByUserId(data) {
+  let id = data.user_id
+  let order = {"items": data.items}
+  
+  if (!id) return {error: 1, status: 400, data: 'identifiant requis'}
+  
+  let sum = 0
+  for (let i = 0; i < order.items.length; i++) {
+    let item = order.items[i]
+    let promotion = 0
+    let itemData = items.find(it => it._id === item.item._id || it.name === item.item.name);
+    
+    if (itemData && itemData.promotion) {
+      for (let j = 0; j < itemData.promotion.length; j++) {
+        if (itemData.promotion[j].amount === item.amount) {
+          promotion = itemData.promotion[j].discount;
+        }
+      }
+    }
+    sum += (item.item.price * item.amount) * (1 - promotion/100)
+  }
+  
+  order["date"] = new Date()
+  order["total"] = sum
+  order["status"] = "paiement_en_attente"
+  order["uuid"] = uuidv4()
+
+  let user = shopusers.find(u => u._id === id)
+  if (!user) return {error: 1, status: 404, data: 'utilisateur non trouvé'}
+  
+  if (!user.orders) user.orders = []
+  user.orders.push(order)
+  
+  return {error: 0, status: 200, data: order}
+}
+
+
+function buyOrderById(data) {
+  const { user_id, order_id } = data;
+  
+  if (!user_id) return { error: 1, status: 400, data: 'Identifiant utilisateur requis' };
+  
+  const user = shopusers.find(u => u._id === user_id);
+  if (!user) return { error: 1, status: 404, data: 'Utilisateur non trouvé' };
+  
+  if (!user.orders) user.orders = []
+  const order = user.orders.find(o => o.uuid === order_id);
+  if (!order) return { error: 1, status: 404, data: 'Commande non trouvée' };
+  
+  order.status = "finalisé";
+  return { error: 0, status: 200, data: order };
+}
+
+
+function getOrdersByUserId(data) {
+  let user_id = data.user_id
+  if (!user_id) return {error: 1, status: 400, data: 'identifiant requis'}
+  
+  let user = shopusers.find(u => u._id === user_id)
+  if (!user) return {error: 1, status: 404, data: 'utilisateur non trouvé'}
+  
+  if (!user.orders) user.orders = []
+  
+  return {error: 0, status: 200, data: JSON.parse(JSON.stringify(user.orders))}
+}
+
+
+function cancelOrderById(data) {
+  let user_id = data.user_id
+  let order_id = data.order_id
+  
+  if (!user_id) return {error: 1, status: 400, data: 'identifiant requis'}
+  if (!order_id) return {error: 1, status: 400, data: 'identifiant de commande requis'}
+  
+  let user = shopusers.find(u => u._id === user_id)
+  if (!user) return {error: 1, status: 404, data: 'utilisateur non trouvé'}
+  
+  if (!user.orders) user.orders = []
+  let order = user.orders.find(o => o.uuid === order_id)
+  if (!order) return {error: 1, status: 404, data: 'commande non trouvée'}
+  
+  order.status = "annulé"
+  return {error: 0, status: 200, data: order}
 }
 
 export default{
@@ -107,5 +199,9 @@ export default{
   getAccountAmount,
   getAccountTransactions,
   getBasket,
-  updateBasket
+  updateBasket,
+  addOrderByUserId,
+  buyOrderById,
+  getOrdersByUserId,
+  cancelOrderById
 }
