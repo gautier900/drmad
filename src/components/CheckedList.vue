@@ -21,17 +21,17 @@
           step="1"
           @input="updateAmount(index, $event.target.value)"
         >
-        
-        <button 
-          v-if="itemButton && itemButton.show == true" 
+
+        <button
+          v-if="itemButton && itemButton.show == true"
           @click="$emit('item-button-clicked', { index, amount: amounts[index] || 1 })"
         >
           {{ itemButton.text }}
         </button>
       </li>
     </ul>
-    <button 
-      v-if="listButton && listButton.show == true" 
+    <button
+      v-if="listButton && listButton.show == true"
       @click="$emit('list-button-clicked', data.map((item, index) => checked && checked[index] ? { index, amount: amounts[index] || 1 } : null).filter(item => item !== null))"
     >
       {{ listButton.text }}
@@ -56,7 +56,7 @@ const amounts = ref({})
 
 function updateAmount(index, value) {
   const amount = parseInt(value, 10) || 1
-  amounts.value[index] = amount
+  amounts.value = { ...amounts.value, [index]: amount }
 }
 
 function getFieldValue(item, field) {
