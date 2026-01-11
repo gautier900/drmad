@@ -4,7 +4,7 @@
 
     <span>login</span><input v-model="login">
     <span>password</span><input type="password" v-model="password">
-    <button @click="handleLogin">Login</button>
+    <button @click="connexion">Login</button>
     
     <p v-if="errorMessage" style="color: red;">{{ errorMessage }}</p>
     
@@ -27,7 +27,7 @@ const errorMessage = ref('')
 const shopStore = useShopStore()
 const router = useRouter()
 
-async function handleLogin() {
+async function connexion() {
   errorMessage.value = ''
   
   const response = await shopStore.shopLogin({login: login.value, password: password.value})
